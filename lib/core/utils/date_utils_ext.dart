@@ -54,5 +54,32 @@ class DateUtilsExt {
     final tomorrow = DateTime(parsed.year, parsed.month, parsed.day + 1);
     return formatIsoDate(tomorrow);
   }
-}
 
+  /// Converts a `YYYY-MM` month string into a human-readable string like 'October 2026'.
+  /// 'ALL' (case-insensitive) converts to 'All Time'.
+  static String formatMonthYear(String isoMonth) {
+    if (isoMonth.trim().toUpperCase() == 'ALL') {
+      return 'All Time';
+    }
+    final parts = isoMonth.split('-');
+    if (parts.length >= 2) {
+      final year = int.tryParse(parts[0]);
+      final month = int.tryParse(parts[1]);
+      if (year != null && month != null && month >= 1 && month <= 12) {
+        final dt = DateTime(year, month);
+        return DateFormat('MMMM yyyy', 'en_US').format(dt);
+      }
+    }
+    return isoMonth;
+  }
+
+  /// Converts a `YYYY-MM-DD` date string into a human-readable display string like 'Oct 30, 2026'.
+  static String formatDisplayDate(String isoDate) {
+    try {
+      final dt = parseIsoDate(isoDate);
+      return DateFormat('MMM d, yyyy', 'en_US').format(dt);
+    } catch (_) {
+      return isoDate;
+    }
+  }
+}
