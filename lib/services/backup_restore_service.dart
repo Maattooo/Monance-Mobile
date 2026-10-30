@@ -1,5 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:drift/drift.dart' as drift;
+import 'package:file_picker/file_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../core/database/app_database.dart';
 import '../models/category_model.dart';
 import '../models/daily_record_model.dart';
@@ -9,6 +13,10 @@ import '../models/hangout_expense_model.dart';
 import '../models/hangout_session_model.dart';
 import '../models/monthly_bill_model.dart';
 import '../models/settings_model.dart';
+import '../providers/bills_provider.dart';
+import '../providers/hangouts_provider.dart';
+import '../providers/records_provider.dart';
+import '../providers/settings_provider.dart';
 
 class BackupRestoreService {
   BackupRestoreService._();
@@ -43,6 +51,71 @@ class BackupRestoreService {
     };
 
     return const JsonEncoder.withIndent('  ').convert(payload);
+  }
+
+  /// Exports backup to a local temporary JSON file and triggers platform file share/save.
+  static Future<bool> exportBackupToFile(AppDatabase db) async {
+    try {
+      final jsonString = await exportToJsonString(db);
+      final tempDir = await getTemporaryDirectory();
+      final now = DateTime.now();
+      final timestamp =
+          '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_'
+          '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+      final fileName = 'monance_backup_$timestamp.json';
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsString(jsonString);
+
+      final xFile = XFile(file.path, mimeType: 'application/json', name: fileName);
+      final shareResult = await Share.shareXFiles([xFile], subject: 'Monance Backup $fileName');
+      return shareResult.status == ShareResultStatus.success;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Opens the platform file picker for a `.json` backup file and restores it into [db].
+  static Future<bool> restoreBackupFromFilePicker(AppDatabase db) async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      if (result == null || result.files.isEmpty) {
+        return false;
+      }
+
+      final pickedFile = result.files.first;
+      String? jsonContent;
+      if (pickedFile.bytes != null) {
+        jsonContent = utf8.decode(pickedFile.bytes!);
+      } else if (pickedFile.path != null) {
+        final file = File(pickedFile.path!);
+        jsonContent = await file.readAsString();
+      }
+
+      if (jsonContent == null || jsonContent.isEmpty) {
+        return false;
+      }
+
+      await restoreFromJsonString(db, jsonContent);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Refreshes all in-memory Riverpod provider state from the database after a restore.
+  static Future<void> refreshProviders(dynamic refOrContainer) async {
+    try {
+      await refOrContainer.read(settingsProvider.notifier).loadSettings();
+      await refOrContainer.read(recordsProvider.notifier).loadRecords();
+      await refOrContainer.read(billsProvider.notifier).loadBills();
+      await refOrContainer.read(hangoutsProvider.notifier).loadSessions();
+      refOrContainer.invalidate(goalHistoryProvider);
+    } catch (_) {
+      // Safe fallback
+    }
   }
 
   /// Pure Dart method to validate and restore all 8 Drift SQLite tables from JSON within

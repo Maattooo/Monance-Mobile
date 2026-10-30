@@ -8,13 +8,16 @@ import '../core/utils/date_utils_ext.dart';
 import '../models/category_model.dart';
 import '../models/goal_history_model.dart';
 import '../models/settings_model.dart';
+import '../services/local_notification_service.dart';
+import 'bills_provider.dart';
 import 'database_provider.dart';
 
 class SettingsNotifier extends StateNotifier<SettingsModel> {
   final AppDatabase _db;
+  final Ref? _ref;
   static const _uuid = Uuid();
 
-  SettingsNotifier(this._db) : super(const SettingsModel()) {
+  SettingsNotifier(this._db, [this._ref]) : super(const SettingsModel()) {
     loadSettings();
   }
 
@@ -173,23 +176,96 @@ class SettingsNotifier extends StateNotifier<SettingsModel> {
         updatedAt: drift.Value(now),
       ),
     );
+
+    if (_ref != null) {
+      try {
+        final notifService = _ref!.read(localNotificationServiceProvider);
+        if (target) {
+          final bills = _ref!.read(billsProvider);
+          await notifService.rescheduleBillNotifications(bills, enabled: true);
+        } else {
+          await notifService.cancelAllNotifications();
+        }
+      } catch (_) {
+        // Notification errors must not block settings state update
+      }
+    }
   }
 
-  Future<void> addCategory(String name, String hexColor) async {
+  Future<bool> addCategory(String name, String hexColor) async {
+    final trimmedName = name.trim();
+    if (trimmedName.isEmpty || trimmedName.length > 30) {
+      return false;
+    }
+    if (state.categories.length >= 25) {
+      return false;
+    }
+
     final sort = state.categories.length;
-    final newCat = CategoryModel(name: name, colorHex: hexColor, sortOrder: sort);
+    final newCat = CategoryModel(name: trimmedName, colorHex: hexColor, sortOrder: sort);
     await _db.into(_db.categoriesTable).insert(
           newCat.toCompanion(),
           mode: drift.InsertMode.insertOrReplace,
         );
     final updatedCategories = List<CategoryModel>.from(state.categories)..add(newCat);
     state = state.copyWith(categories: updatedCategories);
+    return true;
   }
 
-  Future<void> deleteCategory(String name) async {
+  Future<bool> updateCategory(String oldName, {String? newName, String? newHexColor}) async {
+    final index = state.categories.indexWhere((c) => c.name == oldName);
+    if (index == -1) return false;
+
+    final target = state.categories[index];
+    final updatedName = (newName ?? target.name).trim();
+    if (updatedName.isEmpty || updatedName.length > 30) {
+      return false;
+    }
+    final updatedColor = newHexColor ?? target.colorHex;
+
+    if (updatedName != oldName) {
+      await _db.transaction(() async {
+        await (_db.delete(_db.categoriesTable)..where((tbl) => tbl.name.equals(oldName))).go();
+        final updatedModel = CategoryModel(
+          name: updatedName,
+          colorHex: updatedColor,
+          sortOrder: target.sortOrder,
+        );
+        await _db.into(_db.categoriesTable).insert(
+              updatedModel.toCompanion(),
+              mode: drift.InsertMode.insertOrReplace,
+            );
+      });
+    } else {
+      await (_db.update(_db.categoriesTable)..where((tbl) => tbl.name.equals(oldName))).write(
+        CategoriesTableCompanion(
+          colorHex: drift.Value(updatedColor),
+        ),
+      );
+    }
+
+    final updatedModel = CategoryModel(
+      name: updatedName,
+      colorHex: updatedColor,
+      sortOrder: target.sortOrder,
+    );
+    final updatedCategories = [
+      for (int i = 0; i < state.categories.length; i++)
+        if (i == index) updatedModel else state.categories[i]
+    ];
+    state = state.copyWith(categories: updatedCategories);
+    return true;
+  }
+
+  Future<bool> deleteCategory(String name) async {
+    if (state.categories.length <= 1) {
+      return false;
+    }
+
     await (_db.delete(_db.categoriesTable)..where((tbl) => tbl.name.equals(name))).go();
     final updatedCategories = state.categories.where((c) => c.name != name).toList();
     state = state.copyWith(categories: updatedCategories);
+    return true;
   }
 
   /// specification.md §6.3.1: Complete & Archive Goal atomically
@@ -293,7 +369,7 @@ class SettingsNotifier extends StateNotifier<SettingsModel> {
 
 final settingsProvider = StateNotifierProvider<SettingsNotifier, SettingsModel>((ref) {
   final db = ref.watch(databaseProvider);
-  return SettingsNotifier(db);
+  return SettingsNotifier(db, ref);
 });
 
 final goalHistoryProvider = FutureProvider<List<GoalHistoryModel>>((ref) async {

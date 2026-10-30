@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../core/database/app_database.dart';
 import '../core/utils/date_utils_ext.dart';
 import '../models/monthly_bill_model.dart';
+import '../services/local_notification_service.dart';
 import 'database_provider.dart';
 import 'settings_provider.dart';
 
@@ -27,6 +28,19 @@ class BillsNotifier extends StateNotifier<List<MonthlyBillModel>> {
     state = rows.map(MonthlyBillModel.fromDrift).toList();
   }
 
+  Future<void> _rescheduleNotifications() async {
+    try {
+      final settings = _ref.read(settingsProvider);
+      final notifService = _ref.read(localNotificationServiceProvider);
+      await notifService.rescheduleBillNotifications(
+        state,
+        enabled: settings.billNotificationsEnabled,
+      );
+    } catch (_) {
+      // Notification rescheduling must never crash or block bill CRUD
+    }
+  }
+
   /// Implements specification.md §6.5.1: Automatic Monthly Rollover
   Future<bool> checkAndRolloverBills(DateTime now) async {
     final currentMonth = DateUtilsExt.formatIsoMonth(now);
@@ -41,6 +55,7 @@ class BillsNotifier extends StateNotifier<List<MonthlyBillModel>> {
       });
       await _ref.read(settingsProvider.notifier).updateLastBillsMonth(currentMonth);
       await loadBills();
+      await _rescheduleNotifications();
       return true;
     } else if (lastBillsMonth == null) {
       // First run: initialize lastBillsMonth without resetting bills
@@ -70,6 +85,7 @@ class BillsNotifier extends StateNotifier<List<MonthlyBillModel>> {
 
     await _db.into(_db.monthlyBillsTable).insert(bill.toCompanion());
     await loadBills();
+    await _rescheduleNotifications();
     return bill;
   }
 
@@ -78,26 +94,36 @@ class BillsNotifier extends StateNotifier<List<MonthlyBillModel>> {
       bill.toCompanion(),
     );
     await loadBills();
+    await _rescheduleNotifications();
   }
 
   Future<void> deleteBill(String id) async {
     await (_db.delete(_db.monthlyBillsTable)..where((t) => t.id.equals(id))).go();
     state = state.where((b) => b.id != id).toList();
+    await _rescheduleNotifications();
   }
 
   Future<void> toggleBillPaid(String id, [bool? isPaid]) async {
-    final target = state.firstWhere((b) => b.id == id);
+    final index = state.indexWhere((b) => b.id == id);
+    if (index == -1) return; // Safely guarded against non-existent id
+
+    final target = state[index];
     final updatedPaid = isPaid ?? !target.isPaid;
     await (_db.update(_db.monthlyBillsTable)..where((t) => t.id.equals(id))).write(
       MonthlyBillsTableCompanion(isPaid: drift.Value(updatedPaid)),
     );
-    state = state.map((b) => b.id == id ? b.copyWith(isPaid: updatedPaid) : b).toList();
+    state = [
+      for (int i = 0; i < state.length; i++)
+        if (i == index) state[i].copyWith(isPaid: updatedPaid) else state[i]
+    ];
+    await _rescheduleNotifications();
   }
 
   Future<void> resetAllBills() async {
     await (_db.update(_db.monthlyBillsTable))
         .write(const MonthlyBillsTableCompanion(isPaid: drift.Value(false)));
     await loadBills();
+    await _rescheduleNotifications();
   }
 
   /// specification.md §6.5.2: Short-Month Effective Due Day Clamping
@@ -122,4 +148,3 @@ final billsProvider = StateNotifierProvider<BillsNotifier, List<MonthlyBillModel
   final db = ref.watch(databaseProvider);
   return BillsNotifier(db, ref);
 });
-

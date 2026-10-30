@@ -3,8 +3,6 @@ analyzer:
     - build/**
     - android/**
     - lib/core/router/app_router.dart
-    - lib/providers/storage_provider.dart
-    - lib/services/storage_service.dart
     - lib/views/main_shell_view.dart
     - lib/views/calendar/calendar_view.dart
     - lib/views/dashboard/dashboard_view.dart
