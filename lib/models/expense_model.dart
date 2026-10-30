@@ -1,19 +1,51 @@
+import 'package:drift/drift.dart' as drift;
+import '../core/database/app_database.dart';
+
 class ExpenseModel {
   final String id;
-  final int amount; // In cents/centavos (integer)
+  final String date;
   final String title;
+  final int amount; // in cents (> 0)
   final String category;
-  final String deductionType; // 'daily' or 'wallet'
+  final String deductFrom; // 'allowance' | 'balance'
   final int timestamp; // Milliseconds since epoch
 
-  ExpenseModel({
+  const ExpenseModel({
     required this.id,
-    required this.amount,
+    this.date = '',
     required this.title,
-    required this.category,
-    required this.deductionType,
+    required this.amount,
+    this.category = 'Other',
+    this.deductFrom = 'allowance',
     required this.timestamp,
   });
+
+  /// Legacy backward compatibility getter
+  String get deductionType => deductFrom == 'balance' ? 'wallet' : 'daily';
+
+  factory ExpenseModel.fromDrift(ExpensesTableData data) {
+    return ExpenseModel(
+      id: data.id,
+      date: data.date,
+      title: data.title,
+      amount: data.amount,
+      category: data.category,
+      deductFrom: data.deductFrom,
+      timestamp: data.timestamp,
+    );
+  }
+
+  ExpensesTableCompanion toCompanion() {
+    return ExpensesTableCompanion(
+      id: drift.Value(id),
+      date: drift.Value(date),
+      title: drift.Value(title),
+      amount: drift.Value(amount),
+      category: drift.Value(category),
+      deductFrom: drift.Value(deductFrom),
+      timestamp: drift.Value(timestamp),
+    );
+  }
 
   factory ExpenseModel.fromJson(Map<String, dynamic> json) {
     // Robust conversion for amount which can be int or double from JSON
@@ -34,15 +66,22 @@ class ExpenseModel {
       parsedTime = DateTime.tryParse(rawTime)?.millisecondsSinceEpoch ?? parsedTime;
     }
 
-    final rawDeduct = json['deductFrom'] ?? json['deductionType'];
-    final deductionType = (rawDeduct == 'balance' || rawDeduct == 'wallet') ? 'wallet' : 'daily';
+    // AUDIT-002: Map legacy 'daily' -> 'allowance' and 'wallet' -> 'balance'
+    final rawDeduct = (json['deductFrom'] ?? json['deductionType'] ?? 'allowance').toString().toLowerCase();
+    final String deductFrom;
+    if (rawDeduct == 'balance' || rawDeduct == 'wallet') {
+      deductFrom = 'balance';
+    } else {
+      deductFrom = 'allowance';
+    }
 
     return ExpenseModel(
       id: (json['id'] ?? json['_id'] ?? 'exp_${DateTime.now().millisecondsSinceEpoch}').toString(),
-      amount: parsedAmount,
+      date: json['date'] as String? ?? '',
       title: json['title'] as String? ?? '',
+      amount: parsedAmount,
       category: json['category'] as String? ?? 'Other',
-      deductionType: deductionType,
+      deductFrom: deductFrom,
       timestamp: parsedTime,
     );
   }
@@ -50,30 +89,59 @@ class ExpenseModel {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'amount': amount,
+      'date': date,
       'title': title,
+      'amount': amount,
       'category': category,
-      'deductFrom': deductionType == 'wallet' ? 'balance' : 'allowance',
-      'deductionType': deductionType,
+      'deductFrom': deductFrom,
+      'deductionType': deductionType, // for backward compatibility
       'timestamp': timestamp,
     };
   }
 
   ExpenseModel copyWith({
     String? id,
-    int? amount,
+    String? date,
     String? title,
+    int? amount,
     String? category,
-    String? deductionType,
+    String? deductFrom,
     int? timestamp,
+    // Support legacy copyWith parameter
+    String? deductionType,
   }) {
+    final effectiveDeduct = deductFrom ?? (deductionType != null ? (deductionType == 'wallet' ? 'balance' : 'allowance') : this.deductFrom);
     return ExpenseModel(
       id: id ?? this.id,
-      amount: amount ?? this.amount,
+      date: date ?? this.date,
       title: title ?? this.title,
+      amount: amount ?? this.amount,
       category: category ?? this.category,
-      deductionType: deductionType ?? this.deductionType,
+      deductFrom: effectiveDeduct,
       timestamp: timestamp ?? this.timestamp,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExpenseModel &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          date == other.date &&
+          title == other.title &&
+          amount == other.amount &&
+          category == other.category &&
+          deductFrom == other.deductFrom &&
+          timestamp == other.timestamp;
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      date.hashCode ^
+      title.hashCode ^
+      amount.hashCode ^
+      category.hashCode ^
+      deductFrom.hashCode ^
+      timestamp.hashCode;
 }

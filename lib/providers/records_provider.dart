@@ -1,39 +1,75 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
+import 'package:drift/drift.dart' as drift;
+import 'package:uuid/uuid.dart';
+import '../core/database/app_database.dart';
 import '../models/daily_record_model.dart';
 import '../models/expense_model.dart';
-import '../services/storage_service.dart';
-import '../services/sync_service.dart';
-import 'storage_provider.dart';
+import 'database_provider.dart';
 import 'settings_provider.dart';
 
 class RecordsNotifier extends StateNotifier<Map<String, DailyRecordModel>> {
-  final StorageService _storageService;
-  final SyncService _syncService;
+  final AppDatabase _db;
   final Ref _ref;
-  bool isSyncing = false;
+  static const _uuid = Uuid();
 
-  RecordsNotifier(this._storageService, this._syncService, this._ref)
-      : super(_storageService.getCachedRecords());
-
-  static String getTodayKey() {
-    return DateFormat('yyyy-MM-dd').format(DateTime.now());
+  RecordsNotifier(this._db, this._ref) : super({}) {
+    loadRecords();
   }
 
-  /// Gets existing record for a date or initializes it with default allowance
+  Future<void> loadRecords() async {
+    final recordRows = await _db.select(_db.dailyRecordsTable).get();
+    final expenseRows = await _db.select(_db.expensesTable).get();
+
+    final Map<String, List<ExpenseModel>> expensesByDate = {};
+    for (final expRow in expenseRows) {
+      final model = ExpenseModel.fromDrift(expRow);
+      expensesByDate.putIfAbsent(model.date, () => []).add(model);
+    }
+
+    final Map<String, DailyRecordModel> recordsMap = {};
+    for (final recRow in recordRows) {
+      final expenses = expensesByDate[recRow.date] ?? [];
+      recordsMap[recRow.date] = DailyRecordModel.fromDrift(recRow, expenses);
+    }
+
+    state = recordsMap;
+  }
+
   DailyRecordModel getOrCreateRecord(String date) {
     if (state.containsKey(date) && !state[date]!.isDeleted) {
       return state[date]!;
     }
     final defaultAllowance = _ref.read(settingsProvider).defaultAllowance;
-    final newRecord = DailyRecordModel(
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return DailyRecordModel(
       date: date,
       title: 'school',
       startingMoney: defaultAllowance,
-      expenses: [],
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      expenses: const [],
+      isDeleted: false,
+      updatedAt: now,
     );
-    return newRecord;
+  }
+
+  Future<void> setRecord(DailyRecordModel record) async {
+    await _db.transaction(() async {
+      await _db.into(_db.dailyRecordsTable).insert(
+            record.toCompanion(),
+            mode: drift.InsertMode.insertOrReplace,
+          );
+      // Clean existing expenses for this date then insert new ones
+      await (_db.delete(_db.expensesTable)..where((t) => t.date.equals(record.date))).go();
+      for (final exp in record.expenses) {
+        final expWithDate = exp.date.isEmpty ? exp.copyWith(date: record.date) : exp;
+        await _db.into(_db.expensesTable).insert(
+              expWithDate.toCompanion(),
+              mode: drift.InsertMode.insertOrReplace,
+            );
+      }
+    });
+
+    final updated = Map<String, DailyRecordModel>.from(state)..[record.date] = record;
+    state = updated;
   }
 
   Future<void> addExpense({
@@ -41,141 +77,147 @@ class RecordsNotifier extends StateNotifier<Map<String, DailyRecordModel>> {
     required int amount,
     required String title,
     required String category,
-    required String deductionType, // 'daily' or 'wallet'
+    required String deductFrom, // 'allowance' | 'balance'
   }) async {
     final existing = getOrCreateRecord(date);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final expenseId = _uuid.v4();
+
+    // Standardize deductFrom mapping
+    final normalizedDeduct = (deductFrom == 'wallet' || deductFrom == 'balance') ? 'balance' : 'allowance';
+
     final expense = ExpenseModel(
-      id: 'exp_${DateTime.now().millisecondsSinceEpoch}_${(amount % 1000)}',
-      amount: amount,
+      id: expenseId,
+      date: date,
       title: title.trim(),
+      amount: amount,
       category: category,
-      deductionType: deductionType,
-      timestamp: DateTime.now().millisecondsSinceEpoch,
+      deductFrom: normalizedDeduct,
+      timestamp: now,
     );
+
+    await _db.transaction(() async {
+      // Ensure daily record exists in DB
+      await _db.into(_db.dailyRecordsTable).insert(
+            existing.toCompanion(),
+            mode: drift.InsertMode.insertOrIgnore,
+          );
+      await _db.into(_db.expensesTable).insert(expense.toCompanion());
+    });
 
     final updatedExpenses = List<ExpenseModel>.from(existing.expenses)..insert(0, expense);
     final updatedRecord = existing.copyWith(
       expenses: updatedExpenses,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      updatedAt: now,
+      isDeleted: false,
     );
 
+    state = Map<String, DailyRecordModel>.from(state)..[date] = updatedRecord;
+  }
 
-    final updatedMap = Map<String, DailyRecordModel>.from(state)..[date] = updatedRecord;
-    state = updatedMap;
+  Future<void> updateExpense({
+    required String date,
+    required ExpenseModel expense,
+  }) async {
+    final existing = state[date];
+    if (existing == null) return;
 
-    await _storageService.setCachedRecords(updatedMap);
-    await _storageService.addToSyncQueue(updatedRecord);
-    triggerSync();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final expWithDate = expense.date.isEmpty ? expense.copyWith(date: date) : expense;
+
+    await (_db.update(_db.expensesTable)..where((t) => t.id.equals(expense.id))).write(
+      expWithDate.toCompanion(),
+    );
+
+    final updatedExpenses = existing.expenses.map((e) => e.id == expense.id ? expWithDate : e).toList();
+    final updatedRecord = existing.copyWith(expenses: updatedExpenses, updatedAt: now);
+    state = Map<String, DailyRecordModel>.from(state)..[date] = updatedRecord;
   }
 
   Future<void> deleteExpense(String date, String expenseId) async {
     final record = state[date];
     if (record == null) return;
 
-    final targetExpense = record.expenses.firstWhere(
-      (e) => e.id == expenseId,
-      orElse: () => ExpenseModel(id: '', amount: 0, title: '', category: '', deductionType: '', timestamp: 0),
-    );
-
-    if (targetExpense.id.isEmpty) return;
-
+    await (_db.delete(_db.expensesTable)..where((t) => t.id.equals(expenseId))).go();
 
     final updatedExpenses = record.expenses.where((e) => e.id != expenseId).toList();
+    final now = DateTime.now().millisecondsSinceEpoch;
     final updatedRecord = record.copyWith(
       expenses: updatedExpenses,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      updatedAt: now,
     );
 
-    final updatedMap = Map<String, DailyRecordModel>.from(state)..[date] = updatedRecord;
-    state = updatedMap;
-
-    await _storageService.setCachedRecords(updatedMap);
-    await _storageService.addToSyncQueue(updatedRecord);
-    triggerSync();
+    state = Map<String, DailyRecordModel>.from(state)..[date] = updatedRecord;
   }
 
   Future<void> updateStartingMoney(String date, int startingMoneyCents) async {
     final record = getOrCreateRecord(date);
+    final now = DateTime.now().millisecondsSinceEpoch;
     final updatedRecord = record.copyWith(
       startingMoney: startingMoneyCents,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
+      updatedAt: now,
+      isDeleted: false,
     );
 
-    final updatedMap = Map<String, DailyRecordModel>.from(state)..[date] = updatedRecord;
-    state = updatedMap;
+    await _db.into(_db.dailyRecordsTable).insert(
+          updatedRecord.toCompanion(),
+          mode: drift.InsertMode.insertOrReplace,
+        );
 
-    await _storageService.setCachedRecords(updatedMap);
-    await _storageService.addToSyncQueue(updatedRecord);
-    triggerSync();
+    state = Map<String, DailyRecordModel>.from(state)..[date] = updatedRecord;
+  }
+
+  Future<void> clearDay(String date) async {
+    final record = state[date];
+    if (record == null) return;
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final updatedRecord = record.copyWith(
+      isDeleted: true,
+      updatedAt: now,
+    );
+
+    await (_db.update(_db.dailyRecordsTable)..where((t) => t.date.equals(date))).write(
+      DailyRecordsTableCompanion(
+        isDeleted: const drift.Value(true),
+        updatedAt: drift.Value(now),
+      ),
+    );
+
+    state = Map<String, DailyRecordModel>.from(state)..[date] = updatedRecord;
   }
 
   Future<void> markRestDay(String date) async {
-    final existing = getOrCreateRecord(date);
-    final updatedRecord = existing.copyWith(
-      title: 'rest day',
-      startingMoney: 0,
-      expenses: [],
-      isDeleted: true,
-      updatedAt: DateTime.now().millisecondsSinceEpoch,
-    );
-
-    final updatedMap = Map<String, DailyRecordModel>.from(state)..[date] = updatedRecord;
-    state = updatedMap;
-
-    await _storageService.setCachedRecords(updatedMap);
-    await _storageService.addToSyncQueue(updatedRecord);
-    triggerSync();
-  }
-
-  Future<void> triggerSync({bool fullSync = false}) async {
-    if (isSyncing) return;
-    isSyncing = true;
-    try {
-      final res = await _syncService.performSync(fullSync: fullSync);
-      if (res.success && res.updatedRecords != null) {
-        state = res.updatedRecords!;
-      }
-    } finally {
-      isSyncing = false;
-    }
-  }
-
-  /// Clears local sync cursor and pulls all historical records from MongoDB
-  Future<void> forceResyncFromCloud() async {
-    await _storageService.resetLastSyncTime();
-    await triggerSync(fullSync: true);
+    await updateStartingMoney(date, 0);
   }
 }
 
 final recordsProvider = StateNotifierProvider<RecordsNotifier, Map<String, DailyRecordModel>>((ref) {
-  final storage = ref.watch(storageServiceProvider);
-  final syncService = ref.watch(syncServiceProvider);
-  return RecordsNotifier(storage, syncService, ref);
+  final db = ref.watch(databaseProvider);
+  return RecordsNotifier(db, ref);
 });
 
-/// Calculates the dynamic derived wallet balance:
-/// derivedBalance = settings.currentBalance - totalBalanceDeductions
-/// across all non-deleted daily records (mirroring GoalWidget.js).
+/// Critical Derived Wallet Balance Provider (§6.1)
+/// Invariant: Routine expense operations NEVER mutate settings.currentBalance.
+/// Live balance is derived dynamically across all non-deleted daily records.
 final derivedWalletBalanceProvider = Provider<int>((ref) {
   final settings = ref.watch(settingsProvider);
-  final records = ref.watch(recordsProvider);
+  final recordsMap = ref.watch(recordsProvider);
 
   int totalBalanceDeductions = 0;
-  for (final record in records.values) {
+  for (final record in recordsMap.values) {
     if (record.isDeleted) continue;
-    final isAllowanceDay = record.startingMoney > 0;
-    if (isAllowanceDay) {
-      totalBalanceDeductions += record.expenses
-          .where((e) => e.deductionType == 'wallet')
-          .fold(0, (sum, e) => sum + e.amount);
+
+    if (record.startingMoney > 0) {
+      // Allowance Day (record.startingMoney > 0):
+      // Only expenses with deductFrom == 'balance' are added to totalBalanceDeductions
+      totalBalanceDeductions += record.balanceExpensesSum;
     } else {
-      totalBalanceDeductions += record.expenses
-          .fold(0, (sum, e) => sum + e.amount);
+      // Non-Allowance / Rest Day (record.startingMoney <= 0):
+      // All expenses on that day are added to totalBalanceDeductions
+      totalBalanceDeductions += record.totalExpenses;
     }
   }
 
   return settings.currentBalance - totalBalanceDeductions;
 });
-
-final walletBalanceProvider = derivedWalletBalanceProvider;
-

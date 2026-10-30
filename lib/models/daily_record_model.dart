@@ -1,4 +1,6 @@
+import 'package:drift/drift.dart' as drift;
 import 'expense_model.dart';
+import '../core/database/app_database.dart';
 
 class DailyRecordModel {
   final String date; // YYYY-MM-DD
@@ -8,7 +10,7 @@ class DailyRecordModel {
   final bool isDeleted;
   final int updatedAt; // Milliseconds timestamp
 
-  DailyRecordModel({
+  const DailyRecordModel({
     required this.date,
     this.title = 'school',
     this.startingMoney = 0,
@@ -17,28 +19,53 @@ class DailyRecordModel {
     required this.updatedAt,
   });
 
-  /// Total of daily allowance deductions
-  int get dailyExpensesTotal {
+  /// Total sum of expenses deducted from allowance (deductFrom != 'balance')
+  int get allowanceExpensesSum {
     return expenses
-        .where((e) => e.deductionType == 'daily')
+        .where((e) => e.deductFrom != 'balance')
         .fold(0, (sum, e) => sum + e.amount);
   }
 
-  /// Total of wallet balance deductions
-  int get walletExpensesTotal {
+  /// Total sum of expenses deducted from balance / wallet (deductFrom == 'balance')
+  int get balanceExpensesSum {
     return expenses
-        .where((e) => e.deductionType == 'wallet')
+        .where((e) => e.deductFrom == 'balance')
         .fold(0, (sum, e) => sum + e.amount);
   }
 
-  /// Total of all expenses
-  int get totalExpenses {
-    return expenses.fold(0, (sum, e) => sum + e.amount);
+  /// Remaining allowance for this date: startingMoney - allowanceExpensesSum
+  int get remainingAllowance {
+    return startingMoney - allowanceExpensesSum;
   }
 
-  /// Remaining daily allowance for this date
-  int get remainingDailyAllowance {
-    return startingMoney - dailyExpensesTotal;
+  /// Legacy compatibility getters
+  int get dailyExpensesTotal => allowanceExpensesSum;
+  int get walletExpensesTotal => balanceExpensesSum;
+  int get remainingDailyAllowance => remainingAllowance;
+  int get totalExpenses => expenses.fold(0, (sum, e) => sum + e.amount);
+
+  factory DailyRecordModel.fromDrift(
+    DailyRecordsTableData data, [
+    List<ExpenseModel> expenses = const [],
+  ]) {
+    return DailyRecordModel(
+      date: data.date,
+      title: data.title,
+      startingMoney: data.startingMoney,
+      expenses: expenses,
+      isDeleted: data.isDeleted,
+      updatedAt: data.updatedAt,
+    );
+  }
+
+  DailyRecordsTableCompanion toCompanion() {
+    return DailyRecordsTableCompanion(
+      date: drift.Value(date),
+      title: drift.Value(title),
+      startingMoney: drift.Value(startingMoney),
+      isDeleted: drift.Value(isDeleted),
+      updatedAt: drift.Value(updatedAt),
+    );
   }
 
   factory DailyRecordModel.fromJson(Map<String, dynamic> json) {
@@ -106,4 +133,23 @@ class DailyRecordModel {
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is DailyRecordModel &&
+          runtimeType == other.runtimeType &&
+          date == other.date &&
+          title == other.title &&
+          startingMoney == other.startingMoney &&
+          isDeleted == other.isDeleted &&
+          updatedAt == other.updatedAt;
+
+  @override
+  int get hashCode =>
+      date.hashCode ^
+      title.hashCode ^
+      startingMoney.hashCode ^
+      isDeleted.hashCode ^
+      updatedAt.hashCode;
 }
