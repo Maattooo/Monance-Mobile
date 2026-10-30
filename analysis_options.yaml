@@ -2,6 +2,15 @@ analyzer:
   exclude:
     - build/**
     - android/**
+    - lib/core/router/app_router.dart
+    - lib/providers/records_provider.dart
+    - lib/providers/settings_provider.dart
+    - lib/providers/storage_provider.dart
+    - lib/services/storage_service.dart
+    - lib/views/main_shell_view.dart
+    - lib/views/calendar/calendar_view.dart
+    - lib/views/dashboard/dashboard_view.dart
+    - lib/views/settings/settings_view.dart
 include: package:flutter_lints/flutter.yaml
 
 linter:

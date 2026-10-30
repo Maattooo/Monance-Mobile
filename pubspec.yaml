@@ -13,19 +13,28 @@ dependencies:
   # State Management
   flutter_riverpod: ^2.6.1
 
-  # Networking & HTTP
-  dio: ^5.7.0
+  # Local Relational Database (SQLite)
+  drift: ^2.22.0
+  sqlite3_flutter_libs: ^0.5.26
+  path_provider: ^2.1.5
+  path: ^1.9.0
 
-  # Navigation & Routing
-  go_router: ^14.6.0
-
-  # Storage & Security
+  # Offline Security & Biometrics
   flutter_secure_storage: ^9.2.2
-  shared_preferences: ^2.3.3
+  local_auth: ^2.3.0
+  crypto: ^3.0.6
 
-  # Formatting & Calendar
+  # Formatting & Utilities
   intl: ^0.20.1
-  table_calendar: ^3.1.2
+  uuid: ^4.5.1
+
+  # Offline Local Notifications & Timezone Support
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.10.0
+
+  # Offline JSON Backup & Restore
+  file_picker: ^8.1.4
+  share_plus: ^10.1.2
 
   # UI Icons
   cupertino_icons: ^1.0.8
@@ -34,6 +43,19 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  drift_dev: ^2.22.0
+  build_runner: ^2.4.13
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: SpaceGrotesk
+      fonts:
+        - asset: assets/fonts/SpaceGrotesk-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/SpaceGrotesk-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/SpaceGrotesk-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/SpaceGrotesk-Bold.ttf
+          weight: 700
