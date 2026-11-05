@@ -659,9 +659,9 @@ class _SettingsPanelViewState extends ConsumerState<SettingsPanelView> {
                         obscureText: true,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        maxLength: 6,
+                        maxLength: 4,
                         decoration: InputDecoration(
-                          hintText: 'Enter 4–6 digit PIN',
+                          hintText: 'Enter 4-digit PIN',
                           counterText: '',
                           isDense: true,
                           fillColor: colors.bgSecondary,
@@ -675,9 +675,9 @@ class _SettingsPanelViewState extends ConsumerState<SettingsPanelView> {
                         obscureText: true,
                         keyboardType: TextInputType.number,
                         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        maxLength: 6,
+                        maxLength: 4,
                         decoration: InputDecoration(
-                          hintText: 'Confirm PIN',
+                          hintText: 'Confirm 4-digit PIN',
                           counterText: '',
                           isDense: true,
                           fillColor: colors.bgSecondary,
@@ -691,9 +691,9 @@ class _SettingsPanelViewState extends ConsumerState<SettingsPanelView> {
                           final pin = _pinController.text.trim();
                           final confirm = _pinConfirmController.text.trim();
 
-                          if (pin.length < 4 || pin.length > 6) {
+                          if (pin.length != 4) {
                             BrutalistToast.error(
-                                context, 'PIN must be 4–6 digits');
+                                context, 'PIN must be 4 digits');
                             return;
                           }
                           if (pin != confirm) {

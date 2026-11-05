@@ -22,9 +22,9 @@ class _PinLockScreenState extends ConsumerState<PinLockScreen> {
   }
 
   Future<void> _handleVerify(String pin) async {
-    if (pin.length < 4 || pin.length > 6) {
+    if (pin.length != 4) {
       setState(() {
-        _errorMessage = 'PIN must be 4–6 digits';
+        _errorMessage = 'PIN must be 4 digits';
       });
       return;
     }
@@ -37,6 +37,7 @@ class _PinLockScreenState extends ConsumerState<PinLockScreen> {
         _errorMessage = 'Incorrect PIN';
       });
       _pinController.clear();
+      HapticFeedback.vibrate();
     } else {
       setState(() {
         _errorMessage = null;
@@ -79,7 +80,7 @@ class _PinLockScreenState extends ConsumerState<PinLockScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Enter your 4–6 digit PIN to continue',
+                    'Enter your 4-digit PIN to continue',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: AppTheme.fontFamily,
@@ -94,7 +95,7 @@ class _PinLockScreenState extends ConsumerState<PinLockScreen> {
                     obscureText: true,
                     keyboardType: TextInputType.number,
                     textAlign: TextAlign.center,
-                    maxLength: 6,
+                    maxLength: 4,
                     autofocus: true,
                     inputFormatters: [
                       FilteringTextInputFormatter.digitsOnly,
@@ -121,9 +122,12 @@ class _PinLockScreenState extends ConsumerState<PinLockScreen> {
                       ),
                     ),
                     onSubmitted: _handleVerify,
-                    onChanged: (_) {
+                    onChanged: (val) {
                       if (_errorMessage != null) {
                         setState(() => _errorMessage = null);
+                      }
+                      if (val.length == 4) {
+                        _handleVerify(val);
                       }
                     },
                   ),
@@ -141,29 +145,8 @@ class _PinLockScreenState extends ConsumerState<PinLockScreen> {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    key: const Key('pin_unlock_button'),
-                    onPressed: () => _handleVerify(_pinController.text),
-                    style: ElevatedButton.styleFrom(
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      backgroundColor: colors.textPrimary,
-                      foregroundColor: colors.bgPrimary,
-                    ),
-                    child: const Text(
-                      'Unlock',
-                      style: TextStyle(
-                        fontFamily: AppTheme.fontFamily,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
                   if (securityState.isBiometricsEnabled) ...[
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
                     OutlinedButton.icon(
                       key: const Key('biometric_unlock_button'),
                       onPressed: () => ref

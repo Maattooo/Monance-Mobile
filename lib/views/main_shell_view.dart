@@ -109,13 +109,13 @@ class MainShellView extends ConsumerWidget {
           final todayIso = DateUtilsExt.formatIsoDate(DateTime.now());
           DailyModal.show(context, todayIso);
         },
-        backgroundColor: colors.textPrimary,
-        foregroundColor: colors.bgPrimary,
+        backgroundColor: AppTheme.accentEmerald,
+        foregroundColor: Colors.white,
         elevation: 0,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.zero,
         ),
-        child: const Icon(Icons.add),
+        child: const Icon(Icons.add, size: 28),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
@@ -128,7 +128,7 @@ class MainShellView extends ConsumerWidget {
           backgroundColor: colors.bgCard,
           elevation: 0,
           currentIndex: selectedIndex,
-          selectedItemColor: colors.textPrimary,
+          selectedItemColor: AppTheme.accentEmerald,
           unselectedItemColor: colors.textSecondary,
           selectedLabelStyle: const TextStyle(
             fontFamily: AppTheme.fontFamily,

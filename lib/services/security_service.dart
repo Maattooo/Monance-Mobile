@@ -88,9 +88,9 @@ class SecurityService {
   })  : _storage = storage ?? const FlutterSecureStorageWrapper(),
         _localAuth = localAuth ?? LocalAuthentication();
 
-  /// Validates that PIN is strictly 4 to 6 numeric digits
+  /// Validates that PIN is strictly 4 numeric digits
   static bool isValidPin(String pin) {
-    return RegExp(r'^\d{4,6}$').hasMatch(pin);
+    return RegExp(r'^\d{4}$').hasMatch(pin);
   }
 
   /// Generates a cryptographically random 16-byte (32-character hex) salt

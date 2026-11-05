@@ -126,6 +126,7 @@ class AppColors extends ThemeExtension<AppColors> {
 
 class AppTheme {
   static const String fontFamily = 'SpaceGrotesk';
+  static const Color accentEmerald = Color(0xFF00D284);
 
   // Dark Palette Tokens
   static const Color darkBgPrimary = Color(0xFF111111);

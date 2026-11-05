@@ -46,6 +46,9 @@ class GoalWidget extends ConsumerWidget {
 
     final isArchiveReady = metrics.displayRemaining <= 0 && metrics.displayGoal > 0;
     final isNoGoal = settings.goalAmount == 0;
+    final todayIso = DateUtilsExt.formatIsoDate(DateTime.now());
+    final isFutureGoal = settings.goalStartDate != null &&
+        settings.goalStartDate!.compareTo(todayIso) > 0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -79,7 +82,9 @@ class GoalWidget extends ConsumerWidget {
                       const SizedBox(height: 4),
                       Text(
                         settings.goalStartDate != null
-                            ? 'Started ${DateUtilsExt.formatDisplayDate(settings.goalStartDate!)}'
+                            ? (isFutureGoal
+                                ? 'Starts ${DateUtilsExt.formatDisplayDate(settings.goalStartDate!)}'
+                                : 'Started ${DateUtilsExt.formatDisplayDate(settings.goalStartDate!)}')
                             : 'No start date',
                         style: TextStyle(
                           fontFamily: AppTheme.fontFamily,
@@ -142,6 +147,24 @@ class GoalWidget extends ConsumerWidget {
                         ),
                       ),
                     )
+                  else if (isFutureGoal)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: colors.bgSecondary,
+                        border: Border.all(color: colors.colorWarning, width: 1),
+                        borderRadius: BorderRadius.zero,
+                      ),
+                      child: Text(
+                        'Scheduled',
+                        style: TextStyle(
+                          fontFamily: AppTheme.fontFamily,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: colors.colorWarning,
+                        ),
+                      ),
+                    )
                   else
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -162,6 +185,98 @@ class GoalWidget extends ConsumerWidget {
                     ),
                 ],
               ),
+              if (isFutureGoal) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: colors.bgSecondary,
+                    border: Border.all(color: colors.colorWarning, width: 1),
+                    borderRadius: BorderRadius.zero,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: colors.colorWarning),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Goal is scheduled to start on ${DateUtilsExt.formatDisplayDate(settings.goalStartDate!)}. Daily records prior to this date are excluded from your goal.',
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontFamily,
+                                fontSize: 12,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton(
+                            key: const Key('count_all_days_button'),
+                            onPressed: () async {
+                              await ref
+                                  .read(settingsProvider.notifier)
+                                  .updateGoalStartDate(null);
+                            },
+                            style: OutlinedButton.styleFrom(
+                              side: BorderSide(color: colors.borderColor),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                            child: Text(
+                              'COUNT ALL DAYS',
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontFamily,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            key: const Key('start_goal_today_button'),
+                            onPressed: () async {
+                              await ref
+                                  .read(settingsProvider.notifier)
+                                  .updateGoalStartDate(todayIso);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.accentEmerald,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.zero,
+                              ),
+                            ),
+                            child: const Text(
+                              'START TODAY',
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontFamily,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),

@@ -30,6 +30,8 @@ class AnalyticsView extends ConsumerWidget {
 
     final isEmpty = analyticsData.totalExpensesCents == 0 ||
         analyticsData.categoryBreakdown.isEmpty;
+    final topCategory = analyticsData.topCategory;
+    final hasTopCategory = topCategory != null && !isEmpty;
 
     return Scaffold(
       backgroundColor: colors.bgPrimary,
@@ -39,34 +41,56 @@ class AnalyticsView extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Month Filter Selector
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: colors.bgCard,
-                  border: Border.all(color: colors.borderColor, width: 1),
-                  borderRadius: BorderRadius.zero,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Period:',
-                      style: TextStyle(
-                        fontFamily: AppTheme.fontFamily,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: colors.textSecondary,
-                      ),
+              // Integrated Header: Title + Subtitle on Left, Period Dropdown on Right
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'SPENDING ANALYTICS',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontFamily,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasTopCategory
+                              ? 'Top Category: ${topCategory.category} (${topCategory.percentage.toStringAsFixed(0)}%)'
+                              : 'No expenses recorded',
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontFamily,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
-                    DropdownButtonHideUnderline(
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colors.bgCard,
+                      border: Border.all(color: colors.borderColor, width: 1),
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         key: const Key('analytics_month_filter_dropdown'),
                         value: selectedFilter,
                         dropdownColor: colors.bgCard,
                         style: TextStyle(
                           fontFamily: AppTheme.fontFamily,
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color: colors.textPrimary,
                         ),
@@ -101,10 +125,10 @@ class AnalyticsView extends ConsumerWidget {
                         },
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
               // Total Expenses Card with MoM Badge
               Container(
@@ -121,11 +145,12 @@ class AnalyticsView extends ConsumerWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Total Expenses',
+                          'TOTAL EXPENSES TRACKED',
                           style: TextStyle(
                             fontFamily: AppTheme.fontFamily,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
                             color: colors.textSecondary,
                           ),
                         ),
@@ -142,8 +167,8 @@ class AnalyticsView extends ConsumerWidget {
                       key: const Key('total_expenses_text'),
                       style: TextStyle(
                         fontFamily: AppTheme.fontFamily,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
                         color: colors.textPrimary,
                       ),
                     ),
@@ -211,26 +236,27 @@ class AnalyticsView extends ConsumerWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  analyticsData.topCategory?.category ?? 'None',
+                                  settings.privacyMode
+                                      ? '*** %'
+                                      : '${analyticsData.topCategory?.percentage.toStringAsFixed(0) ?? "0"}%',
+                                  key: const Key('top_category_percentage_text'),
+                                  style: TextStyle(
+                                    fontFamily: AppTheme.fontFamily,
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w900,
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  (analyticsData.topCategory?.category ?? 'None').toUpperCase(),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontFamily: AppTheme.fontFamily,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: colors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  settings.privacyMode
-                                      ? '*** %'
-                                      : '${analyticsData.topCategory?.percentage.toStringAsFixed(1) ?? "0.0"}%',
-                                  key: const Key('top_category_percentage_text'),
-                                  style: TextStyle(
-                                    fontFamily: AppTheme.fontFamily,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
                                     color: colors.textSecondary,
                                   ),
                                 ),
@@ -280,18 +306,19 @@ class AnalyticsView extends ConsumerWidget {
                               Row(
                                 children: [
                                   Container(
-                                    width: 10,
-                                    height: 10,
+                                    width: 8,
+                                    height: 8,
                                     color: catColor,
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      item.category,
+                                      item.category.toUpperCase(),
                                       style: TextStyle(
                                         fontFamily: AppTheme.fontFamily,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.5,
                                         color: colors.textPrimary,
                                       ),
                                     ),
@@ -309,19 +336,16 @@ class AnalyticsView extends ConsumerWidget {
                                       color: colors.textPrimary,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  SizedBox(
-                                    width: 48,
-                                    child: Text(
-                                      settings.privacyMode
-                                          ? '*** %'
-                                          : '${item.percentage.toStringAsFixed(1)}%',
-                                      textAlign: TextAlign.right,
-                                      style: TextStyle(
-                                        fontFamily: AppTheme.fontFamily,
-                                        fontSize: 12,
-                                        color: colors.textSecondary,
-                                      ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    settings.privacyMode
+                                        ? '(*** %)'
+                                        : '(${item.percentage.toStringAsFixed(0)}%)',
+                                    style: TextStyle(
+                                      fontFamily: AppTheme.fontFamily,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: colors.textSecondary,
                                     ),
                                   ),
                                 ],

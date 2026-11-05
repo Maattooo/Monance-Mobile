@@ -113,29 +113,32 @@ class _HangoutsViewState extends ConsumerState<HangoutsView> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Hangouts & Split',
-                          style: TextStyle(
-                            fontFamily: AppTheme.fontFamily,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: colors.textPrimary,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hangouts & Split',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: colors.textPrimary,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Group expense tracker & zero-sum settlement',
-                          style: TextStyle(
-                            fontFamily: AppTheme.fontFamily,
-                            fontSize: 12,
-                            color: colors.textSecondary,
+                          const SizedBox(height: 4),
+                          Text(
+                            'Group expense tracker & zero-sum settlement',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 12,
+                              color: colors.textSecondary,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     ElevatedButton(
                       key: const Key('create_hangout_button'),
                       onPressed: () {

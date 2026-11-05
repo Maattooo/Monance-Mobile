@@ -80,9 +80,8 @@ void main() {
 
       expect(find.byType(PinLockScreen), findsOneWidget);
 
-      // Enter wrong PIN: 9999
+      // Enter wrong PIN: 9999 (auto-verifies upon 4th digit)
       await tester.enterText(find.byKey(const Key('pin_input_field')), '9999');
-      await tester.tap(find.byKey(const Key('pin_unlock_button')));
       await tester.pumpAndSettle();
 
       // Mismatch error shown, lock screen remains
@@ -90,9 +89,8 @@ void main() {
       expect(find.text('Incorrect PIN'), findsOneWidget);
       expect(find.byType(MainShellView), findsNothing);
 
-      // Enter right PIN: 1234
+      // Enter right PIN: 1234 (auto-verifies upon 4th digit)
       await tester.enterText(find.byKey(const Key('pin_input_field')), '1234');
-      await tester.tap(find.byKey(const Key('pin_unlock_button')));
       await tester.pumpAndSettle();
 
       // MainShellView renders

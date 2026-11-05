@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'core/theme/app_theme.dart';
@@ -41,13 +42,50 @@ class MonanceApp extends ConsumerStatefulWidget {
   ConsumerState<MonanceApp> createState() => _MonanceAppState();
 }
 
-class _MonanceAppState extends ConsumerState<MonanceApp> {
+class _MonanceAppState extends ConsumerState<MonanceApp>
+    with WidgetsBindingObserver {
+  static const MethodChannel _deviceChannel =
+      MethodChannel('com.example.monance_mobile/device_lifecycle');
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(billsProvider.notifier).checkAndRolloverBills(DateTime.now());
+      _checkDeviceLock();
     });
+
+    _deviceChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onDeviceLocked') {
+        ref.read(securityProvider.notifier).lockApp();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkDeviceLock();
+    }
+  }
+
+  Future<void> _checkDeviceLock() async {
+    try {
+      final wasLocked =
+          await _deviceChannel.invokeMethod<bool>('consumeDeviceLock');
+      if (wasLocked == true) {
+        ref.read(securityProvider.notifier).lockApp();
+      }
+    } catch (_) {
+      // Gracefully ignore in tests or when channel is unavailable
+    }
   }
 
   @override

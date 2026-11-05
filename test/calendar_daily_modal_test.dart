@@ -172,10 +172,30 @@ void main() {
 
       // Assert remaining badge is ₱50.00, color is colorSuccess, no overspent warning
       expect(find.text('₱50.00'), findsOneWidget);
+      expect(find.text(' remaining'), findsOneWidget);
       expect(find.byKey(const Key('overspent_warning')), findsNothing);
 
       final badgeText = tester.widget<Text>(find.text('₱50.00'));
       expect(badgeText.style?.color, equals(AppTheme.darkColors.colorSuccess));
+
+      // Test clickable remaining / spent toggle
+      await tester.tap(find.byKey(const Key('toggle_remaining_spent_button')));
+      await tester.pumpAndSettle();
+      expect(find.text(' spent'), findsOneWidget);
+      // Total spent = 80 (wallet expense) = 80.00 inside remaining_badge
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('remaining_badge')),
+          matching: find.text('₱80.00'),
+        ),
+        findsOneWidget,
+      );
+
+      // Tap again to toggle back to remaining
+      await tester.tap(find.byKey(const Key('toggle_remaining_spent_button')));
+      await tester.pumpAndSettle();
+      expect(find.text(' remaining'), findsOneWidget);
+      expect(find.text('₱50.00'), findsOneWidget);
 
       // Close modal and navigate to calendar to check cell dot
       await tester.tap(find.byIcon(Icons.close));

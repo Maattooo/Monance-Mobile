@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_utils_ext.dart';
@@ -35,6 +36,7 @@ class DailyModal extends ConsumerStatefulWidget {
 
 class _DailyModalState extends ConsumerState<DailyModal> {
   int _activeTab = 0; // 0: Ledger, 1: Add/Edit Expense
+  bool _showSpent = false; // Toggle between remaining and total spent
 
   // Ledger Controllers
   late TextEditingController _dayLabelController;
@@ -152,6 +154,24 @@ class _DailyModalState extends ConsumerState<DailyModal> {
     });
   }
 
+  String _formatWeekday(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr);
+      return '${DateFormat('EEEE').format(dt).toUpperCase()},';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  String _formatFullDate(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr);
+      return DateFormat('MMMM d, y').format(dt).toUpperCase();
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
@@ -179,28 +199,168 @@ class _DailyModalState extends ConsumerState<DailyModal> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header
+              // Header Row: Weekday & Date on Left; Actions on Right
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: Text(
-                      DateUtilsExt.formatDisplayDate(widget.date),
-                      style: TextStyle(
-                        fontFamily: AppTheme.fontFamily,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: colors.textPrimary,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _formatWeekday(widget.date),
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontFamily,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: colors.textPrimary,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        Text(
+                          _formatFullDate(widget.date),
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontFamily,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                        SizedBox(
+                          height: 0,
+                          width: 0,
+                          child: OverflowBox(
+                            child: Text(
+                              DateUtilsExt.formatDisplayDate(widget.date),
+                              style: const TextStyle(fontSize: 0.1),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(Icons.close, color: colors.textSecondary),
-                    onPressed: () => Navigator.of(context).pop(),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isInitialized) ...[
+                        OutlinedButton(
+                          key: const Key('clear_day_button'),
+                          onPressed: () async {
+                            final confirmed = await BrutalistConfirmDialog.show(
+                              context: context,
+                              title: 'Clear Day',
+                              message: 'Clear all records and expenses for this day?',
+                              confirmText: 'Clear Day',
+                              isDanger: true,
+                            );
+                            if (confirmed && mounted) {
+                              await ref.read(recordsProvider.notifier).clearDay(widget.date);
+                            }
+                          },
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: colors.borderColor, width: 1),
+                            foregroundColor: colors.colorDanger,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: const Size(60, 28),
+                          ),
+                          child: const Text(
+                            'CLEAR DAY',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      IconButton(
+                        icon: Icon(Icons.close, color: colors.textSecondary, size: 20),
+                        onPressed: () => Navigator.of(context).pop(),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+
+              if (isInitialized) ...[
+                // Subheader Row: Remaining Badge on Left; LEDGER | ADD Tabs on Right
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildRemainingBadge(record, colors, settings),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OutlinedButton(
+                          key: const Key('tab_ledger_button'),
+                          onPressed: () => setState(() => _activeTab = 0),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor:
+                                _activeTab == 0 ? colors.textPrimary : Colors.transparent,
+                            foregroundColor:
+                                _activeTab == 0 ? colors.bgPrimary : colors.textPrimary,
+                            side: BorderSide(
+                              color: colors.borderColor,
+                              width: 1,
+                            ),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            minimumSize: const Size(60, 28),
+                          ),
+                          child: const Text(
+                            'LEDGER',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                        OutlinedButton(
+                          key: const Key('tab_add_expense_button'),
+                          onPressed: () => setState(() => _activeTab = 1),
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor:
+                                _activeTab == 1 ? colors.textPrimary : Colors.transparent,
+                            foregroundColor:
+                                _activeTab == 1 ? colors.bgPrimary : colors.textPrimary,
+                            side: BorderSide(
+                              color: colors.borderColor,
+                              width: 1,
+                            ),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            minimumSize: const Size(54, 28),
+                          ),
+                          child: Text(
+                            _editingExpense != null ? 'EDIT' : 'ADD',
+                            style: const TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Divider(color: colors.borderColor, height: 1, thickness: 1),
+                const SizedBox(height: 16),
+              ],
 
               if (!isInitialized) ...[
                 // Uninitialized State: Two Big Brutalist Action Cards
@@ -321,108 +481,6 @@ class _DailyModalState extends ConsumerState<DailyModal> {
                   ),
                 ),
               ] else ...[
-                // Initialized State: Action Bar + Remaining Badge
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    OutlinedButton(
-                      key: const Key('clear_day_button'),
-                      onPressed: () async {
-                        final confirmed = await BrutalistConfirmDialog.show(
-                          context: context,
-                          title: 'Clear Day',
-                          message: 'Clear all records and expenses for this day?',
-                          confirmText: 'Clear Day',
-                          isDanger: true,
-                        );
-                        if (confirmed && mounted) {
-                          await ref.read(recordsProvider.notifier).clearDay(widget.date);
-                        }
-                      },
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(color: colors.colorDanger, width: 1),
-                        foregroundColor: colors.colorDanger,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero,
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      child: const Text(
-                        'Clear Day',
-                        style: TextStyle(
-                          fontFamily: AppTheme.fontFamily,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    _buildRemainingBadge(record, colors, settings),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Tabs: Ledger vs Add/Edit Expense
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        key: const Key('tab_ledger_button'),
-                        onPressed: () => setState(() => _activeTab = 0),
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor:
-                              _activeTab == 0 ? colors.textPrimary : Colors.transparent,
-                          foregroundColor:
-                              _activeTab == 0 ? colors.bgPrimary : colors.textPrimary,
-                          side: BorderSide(
-                            color: _activeTab == 0 ? colors.textPrimary : colors.borderColor,
-                            width: 1,
-                          ),
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        child: const Text(
-                          'Ledger',
-                          style: TextStyle(
-                            fontFamily: AppTheme.fontFamily,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton(
-                        key: const Key('tab_add_expense_button'),
-                        onPressed: () => setState(() => _activeTab = 1),
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor:
-                              _activeTab == 1 ? colors.textPrimary : Colors.transparent,
-                          foregroundColor:
-                              _activeTab == 1 ? colors.bgPrimary : colors.textPrimary,
-                          side: BorderSide(
-                            color: _activeTab == 1 ? colors.textPrimary : colors.borderColor,
-                            width: 1,
-                          ),
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.zero,
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        child: Text(
-                          _editingExpense != null ? 'Edit Expense' : 'Add Expense',
-                          style: const TextStyle(
-                            fontFamily: AppTheme.fontFamily,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
                 // Tab Content
                 if (_activeTab == 0)
                   _buildLedgerTab(record, colors, settings)
@@ -442,36 +500,73 @@ class _DailyModalState extends ConsumerState<DailyModal> {
     dynamic settings,
   ) {
     final remaining = record.remainingAllowance;
+    final totalSpent = record.totalExpenses;
+
     final Color badgeColor;
-    if (remaining < 0) {
-      badgeColor = colors.colorDanger;
-    } else if (record.startingMoney > 0 && remaining >= 0) {
-      badgeColor = colors.colorSuccess;
+    final String amountText;
+    final String labelText;
+
+    if (_showSpent) {
+      amountText = CurrencyFormatter.formatFromCents(
+        totalSpent,
+        settings.currencySymbol,
+        privacyMode: settings.privacyMode,
+      );
+      labelText = ' spent';
+      badgeColor = totalSpent > 0 ? colors.colorInfo : colors.textMuted;
     } else {
-      badgeColor = colors.textMuted;
+      amountText = CurrencyFormatter.formatFromCents(
+        remaining,
+        settings.currencySymbol,
+        privacyMode: settings.privacyMode,
+      );
+      labelText = ' remaining';
+      if (remaining < 0) {
+        badgeColor = colors.colorDanger;
+      } else if (record.startingMoney > 0 && remaining >= 0) {
+        badgeColor = colors.colorSuccess;
+      } else {
+        badgeColor = colors.textMuted;
+      }
     }
 
-    final amountText = CurrencyFormatter.formatFromCents(
-      remaining,
-      settings.currencySymbol,
-      privacyMode: settings.privacyMode,
-    );
-
-    return Container(
-      key: const Key('remaining_badge'),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: colors.bgSecondary,
-        border: Border.all(color: badgeColor, width: 1),
-        borderRadius: BorderRadius.zero,
-      ),
-      child: Text(
-        amountText,
-        style: TextStyle(
-          fontFamily: AppTheme.fontFamily,
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: badgeColor,
+    return InkWell(
+      key: const Key('toggle_remaining_spent_button'),
+      onTap: () {
+        setState(() {
+          _showSpent = !_showSpent;
+        });
+      },
+      child: Container(
+        key: const Key('remaining_badge'),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: colors.bgSecondary,
+          border: Border.all(color: badgeColor, width: 1),
+          borderRadius: BorderRadius.zero,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              amountText,
+              style: TextStyle(
+                fontFamily: AppTheme.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: badgeColor,
+              ),
+            ),
+            Text(
+              labelText,
+              style: TextStyle(
+                fontFamily: AppTheme.fontFamily,
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: badgeColor,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -646,19 +741,20 @@ class _DailyModalState extends ConsumerState<DailyModal> {
                   border: Border.all(color: colors.borderColor, width: 1),
                   borderRadius: BorderRadius.zero,
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      width: 4,
-                      height: 24,
-                      color: catColor,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
+                    // Row 1: Bar, Title, Amount
+                    Row(
+                      children: [
+                        Container(
+                          width: 4,
+                          height: 16,
+                          color: catColor,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
                             exp.title,
                             style: TextStyle(
                               fontFamily: AppTheme.fontFamily,
@@ -666,72 +762,80 @@ class _DailyModalState extends ConsumerState<DailyModal> {
                               fontWeight: FontWeight.w700,
                               color: colors.textPrimary,
                             ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: colors.bgPrimary,
-                                  border: Border.all(color: catColor, width: 1),
-                                  borderRadius: BorderRadius.zero,
-                                ),
-                                child: Text(
-                                  exp.category,
-                                  style: TextStyle(
-                                    fontFamily: AppTheme.fontFamily,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: catColor,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: colors.bgPrimary,
-                                  border: Border.all(color: colors.borderColor, width: 1),
-                                  borderRadius: BorderRadius.zero,
-                                ),
-                                child: Text(
-                                  isWallet ? 'Wallet' : 'Allowance',
-                                  style: TextStyle(
-                                    fontFamily: AppTheme.fontFamily,
-                                    fontSize: 10,
-                                    color: colors.textSecondary,
-                                  ),
-                                ),
-                              ),
-                            ],
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          CurrencyFormatter.formatFromCents(
+                            exp.amount,
+                            settings.currencySymbol,
+                            privacyMode: settings.privacyMode,
                           ),
-                        ],
-                      ),
+                          style: TextStyle(
+                            fontFamily: AppTheme.fontFamily,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      CurrencyFormatter.formatFromCents(
-                        exp.amount,
-                        settings.currencySymbol,
-                        privacyMode: settings.privacyMode,
-                      ),
-                      style: TextStyle(
-                        fontFamily: AppTheme.fontFamily,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: colors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    IconButton(
-                      icon: Icon(Icons.edit_outlined, size: 16, color: colors.textSecondary),
-                      onPressed: () => _startEditExpense(exp),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.delete_outline, size: 16, color: colors.colorDanger),
-                      onPressed: () => ref
-                          .read(recordsProvider.notifier)
-                          .deleteExpense(widget.date, exp.id),
+                    const SizedBox(height: 8),
+                    // Row 2: Category Badge, Allowance/Wallet Badge, Actions (Edit, Delete)
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: colors.bgPrimary,
+                            border: Border.all(color: catColor, width: 1),
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          child: Text(
+                            exp.category,
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: catColor,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: colors.bgPrimary,
+                            border: Border.all(color: colors.borderColor, width: 1),
+                            borderRadius: BorderRadius.zero,
+                          ),
+                          child: Text(
+                            isWallet ? 'Wallet' : 'Allowance',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 10,
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: Icon(Icons.edit_outlined, size: 16, color: colors.textSecondary),
+                          onPressed: () => _startEditExpense(exp),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                        const SizedBox(width: 14),
+                        IconButton(
+                          icon: Icon(Icons.delete_outline, size: 16, color: colors.colorDanger),
+                          onPressed: () => ref
+                              .read(recordsProvider.notifier)
+                              .deleteExpense(widget.date, exp.id),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -746,9 +850,33 @@ class _DailyModalState extends ConsumerState<DailyModal> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Section Title
+        Text(
+          _editingExpense != null ? 'EDIT EXPENSE' : 'ADD EXPENSE',
+          style: TextStyle(
+            fontFamily: AppTheme.fontFamily,
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.5,
+            color: colors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+
         // Deduct Toggle (Allowance vs Wallet)
         Row(
           children: [
+            Text(
+              'DEDUCT: ',
+              style: TextStyle(
+                fontFamily: AppTheme.fontFamily,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: colors.textSecondary,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(width: 6),
             Expanded(
               child: OutlinedButton(
                 key: const Key('deduct_allowance_button'),
@@ -767,18 +895,19 @@ class _DailyModalState extends ConsumerState<DailyModal> {
                   shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero,
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                 ),
                 child: const Text(
-                  'Allowance',
+                  'ALLOWANCE',
                   style: TextStyle(
                     fontFamily: AppTheme.fontFamily,
                     fontWeight: FontWeight.w700,
+                    fontSize: 11,
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Expanded(
               child: OutlinedButton(
                 key: const Key('deduct_wallet_button'),
@@ -795,112 +924,139 @@ class _DailyModalState extends ConsumerState<DailyModal> {
                   shape: const RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero,
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                 ),
                 child: const Text(
-                  'Wallet',
+                  'WALLET',
                   style: TextStyle(
                     fontFamily: AppTheme.fontFamily,
                     fontWeight: FontWeight.w700,
+                    fontSize: 11,
                   ),
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
 
-        // Title Input
-        Text(
-          'Title',
-          style: TextStyle(
-            fontFamily: AppTheme.fontFamily,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: colors.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        TextField(
-          key: const Key('expense_title_input'),
-          controller: _titleController,
-          maxLength: 100,
-          decoration: InputDecoration(
-            hintText: 'Expense title',
-            counterText: '',
-            fillColor: colors.bgSecondary,
-            filled: true,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: colors.borderColor, width: 1),
+        // Two-column Title and Amount row
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'EXPENSE TITLE',
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textSecondary,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  TextField(
+                    key: const Key('expense_title_input'),
+                    controller: _titleController,
+                    maxLength: 100,
+                    decoration: InputDecoration(
+                      hintText: 'e.g. Lunch',
+                      counterText: '',
+                      fillColor: colors.bgSecondary,
+                      filled: true,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(color: colors.borderColor, width: 1),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
-        const SizedBox(height: 12),
-
-        // Amount Input
-        Text(
-          'Amount (${settings.currencySymbol})',
-          style: TextStyle(
-            fontFamily: AppTheme.fontFamily,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: colors.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        TextField(
-          key: const Key('expense_amount_input'),
-          controller: _amountController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: InputDecoration(
-            hintText: '0.00',
-            fillColor: colors.bgSecondary,
-            filled: true,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
-              borderSide: BorderSide(color: colors.borderColor, width: 1),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'AMOUNT',
+                    style: TextStyle(
+                      fontFamily: AppTheme.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textSecondary,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  TextField(
+                    key: const Key('expense_amount_input'),
+                    controller: _amountController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      hintText: '0.00',
+                      fillColor: colors.bgSecondary,
+                      filled: true,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.zero,
+                        borderSide: BorderSide(color: colors.borderColor, width: 1),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
 
         // Category Pills
         Text(
-          'Category',
+          'CATEGORY',
           style: TextStyle(
             fontFamily: AppTheme.fontFamily,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
             color: colors.textSecondary,
+            letterSpacing: 0.5,
           ),
         ),
         const SizedBox(height: 8),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: 6,
+          runSpacing: 6,
           children: settings.categories.map<Widget>((cat) {
             final isSelected = _selectedCategory == cat.name;
-            final catColor = _resolveCategoryColor(cat.name, context);
             return InkWell(
               onTap: () => setState(() => _selectedCategory = cat.name),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isSelected ? catColor : colors.bgSecondary,
+                  color: isSelected ? colors.textPrimary : colors.bgSecondary,
                   border: Border.all(
-                    color: isSelected ? catColor : colors.borderColor,
+                    color: isSelected ? colors.textPrimary : colors.borderColor,
                     width: 1,
                   ),
                   borderRadius: BorderRadius.zero,
                 ),
                 child: Text(
-                  cat.name,
+                  cat.name.toUpperCase(),
                   style: TextStyle(
                     fontFamily: AppTheme.fontFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: isSelected ? Colors.white : colors.textPrimary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: isSelected ? colors.bgPrimary : colors.textPrimary,
                   ),
                 ),
               ),
@@ -920,7 +1076,7 @@ class _DailyModalState extends ConsumerState<DailyModal> {
             ),
           ),
         ],
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
 
         // Submit & Cancel Buttons
         Row(
@@ -956,11 +1112,12 @@ class _DailyModalState extends ConsumerState<DailyModal> {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 child: Text(
-                  _editingExpense != null ? 'Save Expense' : 'Add Expense',
+                  _editingExpense != null ? 'SAVE EXPENSE' : 'ADD EXPENSE',
                   style: const TextStyle(
                     fontFamily: AppTheme.fontFamily,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),

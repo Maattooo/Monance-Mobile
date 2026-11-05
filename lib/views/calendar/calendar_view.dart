@@ -77,17 +77,48 @@ class _CalendarViewState extends ConsumerState<CalendarView> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      DateFormat('MMMM yyyy').format(_displayedMonth),
-                      key: const Key('calendar_month_text'),
-                      style: TextStyle(
-                        fontFamily: AppTheme.fontFamily,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: colors.textPrimary,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            DateFormat('MMMM').format(_displayedMonth).toUpperCase(),
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              height: 1.0,
+                              color: colors.textPrimary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            DateFormat('yyyy').format(_displayedMonth),
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                          SizedBox(
+                            height: 0,
+                            width: 0,
+                            child: OverflowBox(
+                              child: Text(
+                                DateFormat('MMMM yyyy').format(_displayedMonth),
+                                key: const Key('calendar_month_text'),
+                                style: const TextStyle(fontSize: 0.1),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         OutlinedButton(
                           key: const Key('prev_month_button'),
@@ -95,16 +126,17 @@ class _CalendarViewState extends ConsumerState<CalendarView> {
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(color: colors.borderColor, width: 1),
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            minimumSize: const Size(36, 32),
+                            minimumSize: const Size(32, 32),
                             shape: const RoundedRectangleBorder(
                               borderRadius: BorderRadius.zero,
                             ),
                           ),
                           child: Text(
-                            'Prev',
+                            '←',
                             style: TextStyle(
                               fontFamily: AppTheme.fontFamily,
-                              fontSize: 12,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
                               color: colors.textPrimary,
                             ),
                           ),
@@ -116,16 +148,16 @@ class _CalendarViewState extends ConsumerState<CalendarView> {
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(color: colors.borderColor, width: 1),
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            minimumSize: const Size(42, 32),
+                            minimumSize: const Size(48, 32),
                             shape: const RoundedRectangleBorder(
                               borderRadius: BorderRadius.zero,
                             ),
                           ),
                           child: Text(
-                            'Today',
+                            'TODAY',
                             style: TextStyle(
                               fontFamily: AppTheme.fontFamily,
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.w700,
                               color: colors.textPrimary,
                             ),
@@ -138,16 +170,17 @@ class _CalendarViewState extends ConsumerState<CalendarView> {
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(color: colors.borderColor, width: 1),
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            minimumSize: const Size(36, 32),
+                            minimumSize: const Size(32, 32),
                             shape: const RoundedRectangleBorder(
                               borderRadius: BorderRadius.zero,
                             ),
                           ),
                           child: Text(
-                            'Next',
+                            '→',
                             style: TextStyle(
                               fontFamily: AppTheme.fontFamily,
-                              fontSize: 12,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
                               color: colors.textPrimary,
                             ),
                           ),
@@ -202,6 +235,7 @@ class _CalendarViewState extends ConsumerState<CalendarView> {
                         final cellDate = dayCells[index];
                         final isoDate = DateUtilsExt.formatIsoDate(cellDate);
                         final isCurrentMonth = cellDate.month == _displayedMonth.month;
+                        final isToday = isoDate == DateUtilsExt.formatIsoDate(DateTime.now());
                         final record = recordsMap[isoDate];
                         final bool hasRecord = record != null && !record.isDeleted;
 
@@ -224,13 +258,23 @@ class _CalendarViewState extends ConsumerState<CalendarView> {
                             decoration: BoxDecoration(
                               color: isCurrentMonth ? colors.bgCard : colors.bgSecondary,
                               border: Border.all(
-                                color: colors.borderColor,
-                                width: 0.5,
+                                color: isToday ? AppTheme.accentEmerald : colors.borderColor,
+                                width: isToday ? 1.5 : 0.5,
                               ),
                               borderRadius: BorderRadius.zero,
                             ),
                             child: Stack(
                               children: [
+                                if (isToday)
+                                  Positioned(
+                                    top: 4,
+                                    right: 4,
+                                    child: Container(
+                                      width: 4,
+                                      height: 4,
+                                      color: AppTheme.accentEmerald,
+                                    ),
+                                  ),
                                 Center(
                                   child: Text(
                                     '${cellDate.day}',

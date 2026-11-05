@@ -94,13 +94,10 @@ void main() {
       expect(hash!.isNotEmpty, isTrue);
       expect(hash, isNot(equals('1234')));
 
-      // Accepts 6-digit PIN ('654321')
-      final setup6 = await service.setupPin('654321');
-      expect(setup6, isTrue);
-      final hash6 = await storage.read(key: SecurityService.keyPinHash);
-      expect(hash6, isNotNull);
-      expect(hash6, isNot(equals(hash)));
-      expect(hash6, isNot(equals('654321')));
+      // Strictly 4-digit PIN: rejects 5 and 6-digit PINs
+      expect(SecurityService.isValidPin('12345'), isFalse);
+      expect(SecurityService.isValidPin('654321'), isFalse);
+      expect(() => service.setupPin('654321'), throwsArgumentError);
     });
 
     test('Cold-start lock & verification', () async {
