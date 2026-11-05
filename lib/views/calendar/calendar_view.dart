@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:table_calendar/table_calendar.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/utils/date_utils_ext.dart';
 import '../../providers/records_provider.dart';
-import '../../core/utils/currency_formatter.dart';
-import '../dashboard/add_expense_sheet.dart';
+import 'daily_modal.dart';
 
 class CalendarView extends ConsumerStatefulWidget {
   const CalendarView({super.key});
@@ -14,318 +14,267 @@ class CalendarView extends ConsumerStatefulWidget {
 }
 
 class _CalendarViewState extends ConsumerState<CalendarView> {
-  DateTime _focusedDay = DateTime.now();
-  DateTime _selectedDay = DateTime.now();
+  late DateTime _displayedMonth;
 
-  String _formatDateKey(DateTime date) {
-    return DateFormat('yyyy-MM-dd').format(date);
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _displayedMonth = DateTime(now.year, now.month, 1);
   }
 
-  void _showEditStartingMoneyDialog(String dateKey, int currentStartingMoney) {
-    final controller = TextEditingController(
-      text: CurrencyFormatter.centsToPesos(currentStartingMoney).toStringAsFixed(2),
-    );
+  void _goToPrevMonth() {
+    setState(() {
+      _displayedMonth = DateTime(_displayedMonth.year, _displayedMonth.month - 1, 1);
+    });
+  }
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Day Allowance'),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(
-            prefixText: '₱ ',
-            labelText: 'Starting Allowance',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final pesos = double.tryParse(controller.text.trim()) ?? 0.0;
-              final cents = CurrencyFormatter.pesosToCents(pesos);
-              ref.read(recordsProvider.notifier).updateStartingMoney(dateKey, cents);
-              Navigator.pop(ctx);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
+  void _goToNextMonth() {
+    setState(() {
+      _displayedMonth = DateTime(_displayedMonth.year, _displayedMonth.month + 1, 1);
+    });
+  }
+
+  void _goToToday() {
+    final now = DateTime.now();
+    setState(() {
+      _displayedMonth = DateTime(now.year, now.month, 1);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final records = ref.watch(recordsProvider);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.appColors;
+    final recordsMap = ref.watch(recordsProvider);
 
-    final selectedKey = _formatDateKey(_selectedDay);
-    final selectedRecord = ref.read(recordsProvider.notifier).getOrCreateRecord(selectedKey);
+    // Compute 42 day cells
+    final firstDayOfMonth = DateTime(_displayedMonth.year, _displayedMonth.month, 1);
+    final leadingDays = firstDayOfMonth.weekday % 7; // Sunday = 0, Monday = 1, etc.
+    final startDate = firstDayOfMonth.subtract(Duration(days: leadingDays));
+
+    final dayCells = List.generate(42, (index) {
+      return DateTime(startDate.year, startDate.month, startDate.day + index);
+    });
+
+    final weekHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Calendar & Records',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
-      body: ListView(
-        children: [
-          // TableCalendar
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: TableCalendar(
-                firstDay: DateTime.utc(2020, 1, 1),
-                lastDay: DateTime.utc(2035, 12, 31),
-                focusedDay: _focusedDay,
-                selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                onDaySelected: (selectedDay, focusedDay) {
-                  setState(() {
-                    _selectedDay = selectedDay;
-                    _focusedDay = focusedDay;
-                  });
-                },
-                calendarFormat: CalendarFormat.month,
-                headerStyle: const HeaderStyle(
-                  formatButtonVisible: false,
-                  titleCentered: true,
-                  titleTextStyle: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+      backgroundColor: colors.bgPrimary,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header Navigation Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: colors.bgCard,
+                  border: Border.all(color: colors.borderColor, width: 1),
+                  borderRadius: BorderRadius.zero,
                 ),
-                calendarStyle: CalendarStyle(
-                  selectedDecoration: BoxDecoration(
-                    color: isDark ? Colors.white : Colors.black,
-                    shape: BoxShape.circle,
-                  ),
-                  selectedTextStyle: TextStyle(
-                    color: isDark ? Colors.black : Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  todayDecoration: BoxDecoration(
-                    border: Border.all(
-                      color: isDark ? Colors.white : Colors.black,
-                      width: 1.5,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      DateFormat('MMMM yyyy').format(_displayedMonth),
+                      key: const Key('calendar_month_text'),
+                      style: TextStyle(
+                        fontFamily: AppTheme.fontFamily,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
+                      ),
                     ),
-                    shape: BoxShape.circle,
-                  ),
-                  todayTextStyle: TextStyle(
-                    color: isDark ? Colors.white : Colors.black,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                eventLoader: (day) {
-                  final key = _formatDateKey(day);
-                  final record = records[key];
-                  if (record != null && record.expenses.isNotEmpty && !record.isDeleted) {
-                    return record.expenses;
-                  }
-                  return [];
-                },
-                calendarBuilders: CalendarBuilders(
-                  markerBuilder: (context, day, events) {
-                    if (events.isNotEmpty) {
-                      return Positioned(
-                        bottom: 6,
-                        child: Container(
-                          width: 5,
-                          height: 5,
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.white70 : Colors.black87,
-                            shape: BoxShape.circle,
+                    Row(
+                      children: [
+                        OutlinedButton(
+                          key: const Key('prev_month_button'),
+                          onPressed: _goToPrevMonth,
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: colors.borderColor, width: 1),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: const Size(36, 32),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          child: Text(
+                            'Prev',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 12,
+                              color: colors.textPrimary,
+                            ),
                           ),
                         ),
-                      );
-                    }
-                    return null;
-                  },
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          // Day Details Card
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              DateFormat('MMMM d, yyyy').format(_selectedDay),
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        const SizedBox(width: 6),
+                        OutlinedButton(
+                          key: const Key('today_button'),
+                          onPressed: _goToToday,
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: colors.borderColor, width: 1),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: const Size(42, 32),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
                             ),
-                            Text(
-                              selectedRecord.isDeleted ? 'Rest Day' : selectedRecord.title,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDark ? Colors.grey[400] : Colors.grey[600],
-                              ),
+                          ),
+                          child: Text(
+                            'Today',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: colors.textPrimary,
                             ),
-                          ],
+                          ),
                         ),
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, size: 20),
-                              tooltip: 'Edit Starting Allowance',
-                              onPressed: () => _showEditStartingMoneyDialog(
-                                selectedKey,
-                                selectedRecord.startingMoney,
-                              ),
+                        const SizedBox(width: 6),
+                        OutlinedButton(
+                          key: const Key('next_month_button'),
+                          onPressed: _goToNextMonth,
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: colors.borderColor, width: 1),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: const Size(36, 32),
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.hotel_outlined, size: 20),
-                              tooltip: 'Mark Rest Day',
-                              onPressed: () => ref.read(recordsProvider.notifier).markRestDay(selectedKey),
+                          ),
+                          child: Text(
+                            'Next',
+                            style: TextStyle(
+                              fontFamily: AppTheme.fontFamily,
+                              fontSize: 12,
+                              color: colors.textPrimary,
                             ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 24),
-
-                    // Metrics
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        Column(
-                          children: [
-                            Text(
-                              'Starting',
-                              style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[600]),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              CurrencyFormatter.formatCompactFromCents(selectedRecord.startingMoney),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          children: [
-                            Text(
-                              'Spent',
-                              style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[600]),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              CurrencyFormatter.formatCompactFromCents(selectedRecord.dailyExpensesTotal),
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          children: [
-                            Text(
-                              'Remaining',
-                              style: TextStyle(fontSize: 11, color: isDark ? Colors.grey[400] : Colors.grey[600]),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              CurrencyFormatter.formatCompactFromCents(selectedRecord.remainingDailyAllowance),
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: selectedRecord.remainingDailyAllowance >= 0 ? Colors.green : Colors.red,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ],
                     ),
                   ],
                 ),
               ),
-            ),
-          ),
-          const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-          // Expenses on this day
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Expenses',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              // Sun-Sat Day Headers
+              Container(
+                decoration: BoxDecoration(
+                  color: colors.bgCard,
+                  border: Border.all(color: colors.borderColor, width: 1),
+                  borderRadius: BorderRadius.zero,
                 ),
-                TextButton.icon(
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add'),
-                  onPressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (ctx) => AddExpenseSheet(date: selectedKey),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-
-          if (selectedRecord.expenses.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Center(
-                child: Text(
-                  'No expenses recorded for this day',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isDark ? Colors.grey[600] : Colors.grey[400],
-                  ),
-                ),
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Column(
-                children: selectedRecord.expenses.map((exp) {
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 6),
-                    child: ListTile(
-                      title: Text(exp.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                      subtitle: Text(exp.category),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '-${CurrencyFormatter.formatFromCents(exp.amount)}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            color: Colors.red[400],
-                            onPressed: () {
-                              ref.read(recordsProvider.notifier).deleteExpense(selectedKey, exp.id);
-                            },
-                          ),
-                        ],
+                child: Column(
+                  children: [
+                    Container(
+                      color: colors.bgSecondary,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        children: weekHeaders.map((day) {
+                          return Expanded(
+                            child: Text(
+                              day,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: AppTheme.fontFamily,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       ),
                     ),
-                  );
-                }).toList(),
-              ),
-            ),
 
-          const SizedBox(height: 24),
-        ],
+                    // 6-row 42-cell Grid
+                    GridView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: 42,
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 7,
+                        childAspectRatio: 1.0,
+                      ),
+                      itemBuilder: (context, index) {
+                        final cellDate = dayCells[index];
+                        final isoDate = DateUtilsExt.formatIsoDate(cellDate);
+                        final isCurrentMonth = cellDate.month == _displayedMonth.month;
+                        final record = recordsMap[isoDate];
+                        final bool hasRecord = record != null && !record.isDeleted;
+
+                        Color? dotColor;
+                        if (hasRecord) {
+                          final remaining = record.remainingAllowance;
+                          if (remaining < 0) {
+                            dotColor = colors.colorDanger;
+                          } else if (record.startingMoney > 0 && remaining >= 0) {
+                            dotColor = colors.colorSuccess;
+                          } else {
+                            dotColor = colors.textMuted;
+                          }
+                        }
+
+                        return InkWell(
+                          key: Key('calendar_day_cell_$isoDate'),
+                          onTap: () => DailyModal.show(context, isoDate),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: isCurrentMonth ? colors.bgCard : colors.bgSecondary,
+                              border: Border.all(
+                                color: colors.borderColor,
+                                width: 0.5,
+                              ),
+                              borderRadius: BorderRadius.zero,
+                            ),
+                            child: Stack(
+                              children: [
+                                Center(
+                                  child: Text(
+                                    '${cellDate.day}',
+                                    style: TextStyle(
+                                      fontFamily: AppTheme.fontFamily,
+                                      fontSize: 13,
+                                      fontWeight: isCurrentMonth
+                                          ? FontWeight.w600
+                                          : FontWeight.w400,
+                                      color: isCurrentMonth
+                                          ? colors.textPrimary
+                                          : colors.textMuted,
+                                    ),
+                                  ),
+                                ),
+                                if (dotColor != null)
+                                  Positioned(
+                                    bottom: 4,
+                                    left: 0,
+                                    right: 0,
+                                    child: Center(
+                                      child: Container(
+                                        key: Key('cell_dot_$isoDate'),
+                                        width: 5,
+                                        height: 5,
+                                        decoration: BoxDecoration(
+                                          color: dotColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
