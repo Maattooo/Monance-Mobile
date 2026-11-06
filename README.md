@@ -1,91 +1,167 @@
-# Monance Mobile (Flutter & Android Studio)
+# Monance Mobile
 
-A mobile companion application for **Monance**, built with Flutter, Riverpod, Dio, and GoRouter. Connects seamlessly to the existing Next.js & MongoDB backend.
-
----
-
-## Quick Start: Opening & Running in Android Studio
-
-### 1. Open in Android Studio
-1. Launch **Android Studio**.
-2. Select **File -> Open...** (or **Open** from the welcome splash).
-3. Navigate to this repository and select the **`mobile/`** directory:
-   ```
-   c:\Users\mrtnm\Desktop\Programs\MonanceMobile
-   ```
-4. Click **OK**. Android Studio will recognize the Flutter/Dart project and load Gradle sync.
-
-### 2. Fetch Flutter Dependencies
-Inside Android Studio:
-- Click **'Pub get'** in the action bar at the top of `pubspec.yaml`, or run in Android Studio's Terminal:
-  ```bash
-  flutter pub get
-  ```
-
-### 3. Start the Next.js Backend
-In another terminal (or your root project window):
-```bash
-npm run dev
-```
-The Next.js server starts at `http://localhost:3000`.
-
-### 4. Run the Mobile App
-1. In Android Studio's device selector toolbar, choose an **Android Virtual Device (AVD Emulator)**.
-2. Press the green **Run (▶)** button or press `Shift + F10`.
-3. The app will launch, and automatically point to `http://10.0.2.2:3000` (which routes to your computer's `localhost:3000`).
+Monance Mobile is an offline-first, high-contrast personal finance companion application built with Flutter and Riverpod. It provides deterministic daily allowance tracking, recurring bill management, savings goal pacing, group expense splitting, and local data persistence.
 
 ---
 
-## Connecting Devices
+## Overview
 
-### A. Android Emulator (Default)
-- The app defaults to `http://10.0.2.2:3000`, which is the special alias loopback address Android emulator uses to reach host machine's `localhost:3000`.
-- Cleartext HTTP traffic is pre-configured in `android/app/src/main/AndroidManifest.xml` (`android:usesCleartextTraffic="true"`).
+Monance Mobile operates entirely on-device without external server dependencies, cloud accounts, or tracking SDKs. All data is stored in a local relational SQLite database using Drift. Network permissions are explicitly omitted from the application manifest, ensuring complete data privacy and isolation.
 
-### B. Physical Android Device (Wi-Fi / USB)
-1. Ensure your phone and your PC are connected to the same Wi-Fi network.
-2. Find your PC's local IP address (`ipconfig` on Windows, e.g. `192.168.1.15`).
-3. Open the app on your phone.
-4. Tap the **Server URL** on the Login screen or in **Settings -> Backend Server URL**, and change it to:
-   ```
-   http://192.168.1.15:3000
-   ```
+The user interface follows a strict neobrutalist design system: zero border radiuses, high-contrast monochrome backgrounds with emerald green accents, and bundled Space Grotesk typography.
+
+---
+
+## Features
+
+### 1. Dashboard and Savings Goal Engine
+- Semi-circular progress gauge showing goal completion percentage.
+- Real-time pacing metrics: Total Saved, Average Daily Savings, and Burn Rate percentage.
+- Allowance day filtering: historical days prior to the active goal start date are strictly excluded to prevent double-counting.
+- Direct wallet balance management with Add and Set balance modes.
+- Goal completion and archiving with atomic balance transfer and one-tap undo restoration.
+- Smart Budget Tip generator providing contextual spending recommendations.
+
+### 2. Calendar and Daily Allowance Ledger
+- Forty-two cell calendar grid displaying monthly activity dots.
+- Daily modal supporting work/school allowance tracking and rest days.
+- Interactive badge toggling between remaining daily allowance and total daily spend across all expense sources.
+- Expense ledger with category tagging, deletion, and deduction source selection (Allowance or Wallet).
+- Protection against overspending: wallet deductions are isolated from allowance calculations.
+
+### 3. Spending Analytics
+- Category breakdown with proportional visual progress bars.
+- Custom-painted donut chart visualizing expense distribution.
+- Period filtering: All Time, Thirty Days, Seven Days, and Custom Month.
+- Month-over-Month spending comparisons.
+- Fallback color mapping for custom or deleted categories.
+
+### 4. Recurring Bills Management
+- Monthly recurring bills tracking with due day indicators (Paid, Overdue, Due Today, Due in X days).
+- Automatic monthly rollover handling.
+- Short-month clamping algorithm for months with fewer than 31 days (for example, February 28 or 29).
+- Square toggle checkboxes for marking bills as paid or unpaid.
+- Master bills reset action for new billing cycles.
+
+### 5. Hangouts and Group Expense Splitting
+- Session-based group expense tracker.
+- Automatic remainder absorption: penny discrepancies during equal splits are absorbed by the payer.
+- Pairwise zero-net debt settlement algorithm ("Who Owes Whom").
+- Idempotent calendar logging: merges user share into daily calendar records without creating duplicate entries.
+
+### 6. Security and Offline Privacy
+- Zero internet permissions in the Android application manifest.
+- Optional 4-digit PIN lock screen with salted HMAC-SHA256 hashing stored in Android Keystore / EncryptedSharedPreferences.
+- Automatic verification on fourth digit entry with input clearance on failure.
+- Screen-off lifecycle listener: keeps session active while switching applications, re-locking when the device screen turns off or locks.
+- Global privacy masking toggle: replaces sensitive currency figures with asterisks across all views.
+- Atomic offline JSON backup and restore covering all relational tables.
+
+---
+
+## Technical Stack
+
+- Framework: Flutter (Dart 3)
+- State Management: Riverpod (StateNotifier and Providers)
+- Database: Drift with native SQLite bindings (sqlite3_flutter_libs)
+- Secure Storage: flutter_secure_storage
+- Cryptography: crypto (HMAC-SHA256)
+- Local Notifications: flutter_local_notifications
+- Backup and File Sharing: file_picker, share_plus
+- Typography: Space Grotesk (bundled locally in TTF format)
 
 ---
 
 ## Project Structure
 
 ```
-mobile/
-├── android/                   # Android native configuration & Gradle scripts
-│   └── app/src/main/
-│       └── AndroidManifest.xml # Configured with cleartext HTTP & Internet permission
-├── lib/
-│   ├── core/
-│   │   ├── constants/         # API endpoints & storage keys
-│   │   ├── network/           # Dio HTTP client with JWT & 401 interceptors
-│   │   ├── router/            # GoRouter + Riverpod RouterNotifier auth guard
-│   │   ├── theme/             # Sleek high-contrast monochrome light & dark theme
-│   │   └── utils/             # PHP (₱) currency formatting & conversions
-│   ├── models/                # Strongly typed User, Settings, Expense, DailyRecord
-│   ├── providers/             # Riverpod state notifiers (Auth, Records, Settings, Theme)
-│   ├── services/              # StorageService, AuthService, SyncService
-│   ├── views/
-│   │   ├── auth/              # LoginView & RegisterView
-│   │   ├── dashboard/         # DashboardView & AddExpenseSheet
-│   │   ├── calendar/          # CalendarView with TableCalendar
-│   │   ├── goal/              # GoalView (Savings Goal Progress)
-│   │   ├── settings/          # SettingsView (Theme, IP config, categories, logout)
-│   │   └── main_shell_view.dart # Shell navigation bar
-│   └── main.dart              # Entry point bootstrapping storage and ProviderScope
-└── pubspec.yaml               # Project dependencies (Riverpod, Dio, GoRouter, etc.)
+lib/
+|-- core/
+|   |-- constants/         # Category definitions and design constants
+|   |-- database/          # Drift database schema, tables, and DAOs
+|   |-- theme/             # Neobrutalist design system and color palette
+|   `-- utils/             # Currency, date, and math utilities
+|-- models/                # Immutable domain data models
+|-- providers/             # Riverpod state notifiers and computation engines
+|-- services/              # Backup, security, and notification services
+`-- views/
+    |-- analytics/         # Analytics view, donut chart, category bars
+    |-- bills/             # Bills view, rollover handler, bill modals
+    |-- calendar/          # Calendar grid view and daily allowance modal
+    |-- dashboard/         # Dashboard view, goal gauge, add money modal
+    |-- hangouts/          # Hangouts list, split view, settlement cards
+    |-- security/          # PIN lock screen and authentication gates
+    |-- settings/          # Settings panel view and accordion sections
+    `-- main_shell_view.dart # Root navigation shell with persistent bottom bar
 ```
 
 ---
 
-## Key Design Patterns
+## Getting Started
 
-- **JWT Authentication**: On sign in, JWT token is securely stored via `flutter_secure_storage`. The Dio interceptor attaches `Authorization: Bearer <token>` to all requests.
-- **CSRF & Cookie Independence**: The Next.js backend supports both web cookie sessions and mobile Bearer tokens.
-- **Offline Caching & Sync**: Edits are immediately written to local `shared_preferences`, queued, and synced with MongoDB with conflict-resolution timestamps.
-- **Production Release Note**: When building a production release targeting HTTPS (e.g. Vercel), remove `android:usesCleartextTraffic="true"` from `AndroidManifest.xml`.
+### Prerequisites
+
+- Flutter SDK version 3.24.0 or higher
+- Android SDK version 34 or higher (Android API level 36 compile SDK recommended)
+- Java Development Kit (JDK) 17 or higher
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-username/MonanceMobile.git
+   cd MonanceMobile
+   ```
+
+2. Install dependencies:
+   ```bash
+   flutter pub get
+   ```
+
+3. Generate Drift database bindings:
+   ```bash
+   dart run build_runner build --delete-conflicting-outputs
+   ```
+
+4. Verify code quality:
+   ```bash
+   flutter analyze
+   flutter test
+   ```
+
+5. Run the application on a connected device or emulator:
+   ```bash
+   flutter run
+   ```
+
+### Building the Release APK
+
+To compile an optimized, standalone release APK for distribution:
+
+```bash
+flutter build apk --release
+```
+
+The resulting package will be generated at:
+`build/app/outputs/flutter-apk/app-release.apk`
+
+---
+
+## Testing
+
+The project maintains test suites covering financial calculations, database migrations, state immutability, and widget interactions:
+
+```bash
+# Run all unit and widget tests
+flutter test
+
+# Run a specific test suite
+flutter test test/goal_calculations_test.dart
+flutter test test/calendar_daily_modal_test.dart
+flutter test test/hangouts_view_test.dart
+flutter test test/backup_restore_test.dart
+```
+
+---
+
+## Made by Maattooo
